@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canaa-dark: #011b94;
+  --color-canaa-blue: #004bfc;
+  --color-canaa-light: #6eb8ff;
+  --color-canaa-bg: #e3eff9;
+  --color-canaa-white: #fefefe;
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-canaa-dark);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom checked-state styling helpers for radio inputs */
+input[type="radio"] {
+  accent-color: var(--color-canaa-blue);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(20%) sepia(90%) saturate(3000%) hue-rotate(215deg);
+  cursor: pointer;
+}
