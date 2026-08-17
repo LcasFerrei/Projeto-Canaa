@@ -1,6 +1,5 @@
 import { triggerDownload } from "./download";
 import { getAge } from "./birthday";
-import { loadSchema } from "./formSchemaStorage";
 
 function escapeField(value) {
   const str = String(value ?? "");
@@ -20,8 +19,7 @@ function fieldDisplayValue(field, value) {
   return value ?? "";
 }
 
-export function recordsToCsv(records) {
-  const schema = loadSchema();
+export function recordsToCsv(records, schema) {
   const fields = schema.steps.flatMap((s) => s.fields).filter((f) => f.type !== "photo");
 
   const headers = [];
@@ -45,8 +43,8 @@ export function recordsToCsv(records) {
   return lines.join("\r\n");
 }
 
-export function downloadCsv(records, filename = "cadastros-canaa.csv") {
-  const csv = recordsToCsv(records);
+export function downloadCsv(records, schema, filename = "cadastros-canaa.csv") {
+  const csv = recordsToCsv(records, schema);
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   triggerDownload(blob, filename);
 }

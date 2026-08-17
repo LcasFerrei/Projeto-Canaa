@@ -1,25 +1,22 @@
+import { apiFetch } from "./apiClient";
 import { DEFAULT_SCHEMA } from "../config/formSchema";
 
-const SCHEMA_KEY = "canaa_form_schema";
-
-export function loadSchema() {
+export async function loadSchema() {
   try {
-    const raw = localStorage.getItem(SCHEMA_KEY);
-    if (!raw) return DEFAULT_SCHEMA;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed?.steps)) return DEFAULT_SCHEMA;
-    return parsed;
+    const schema = await apiFetch("/api/schema");
+    if (!Array.isArray(schema?.steps)) return DEFAULT_SCHEMA;
+    return schema;
   } catch {
     return DEFAULT_SCHEMA;
   }
 }
 
-export function saveSchema(schema) {
-  localStorage.setItem(SCHEMA_KEY, JSON.stringify(schema));
+export async function saveSchema(schema) {
+  await apiFetch("/api/schema", { method: "PUT", body: JSON.stringify(schema) });
 }
 
-export function resetSchema() {
-  localStorage.removeItem(SCHEMA_KEY);
+export async function resetSchema() {
+  return apiFetch("/api/schema", { method: "DELETE" });
 }
 
 export function slugifyFieldId(label, existingIds) {

@@ -22,7 +22,10 @@ export default function Login({ onSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
+  const [securityQuestion, setSecurityQuestion] = useState(null);
+  const [loadingQuestion, setLoadingQuestion] = useState(false);
   const [answer, setAnswer] = useState("");
   const [answerVerified, setAnswerVerified] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -46,11 +49,19 @@ export default function Login({ onSuccess }) {
   function goToForgot() {
     resetRecoveryState();
     setView("forgot");
+    setLoadingQuestion(true);
+    getSecurityQuestion().then((q) => {
+      setSecurityQuestion(q);
+      setLoadingQuestion(false);
+    });
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (login(email, password)) {
+    setBusy(true);
+    const ok = await login(email, password);
+    setBusy(false);
+    if (ok) {
       setError("");
       onSuccess();
     } else {
@@ -58,9 +69,12 @@ export default function Login({ onSuccess }) {
     }
   }
 
-  function handleVerifyAnswer(e) {
+  async function handleVerifyAnswer(e) {
     e.preventDefault();
-    if (verifySecurityAnswer(answer)) {
+    setBusy(true);
+    const ok = await verifySecurityAnswer(answer);
+    setBusy(false);
+    if (ok) {
       setError("");
       setAnswerVerified(true);
     } else {
@@ -68,7 +82,7 @@ export default function Login({ onSuccess }) {
     }
   }
 
-  function handleResetPassword(e) {
+  async function handleResetPassword(e) {
     e.preventDefault();
     if (newPassword.length < 4) {
       setError("A nova senha precisa ter pelo menos 4 caracteres.");
@@ -78,17 +92,22 @@ export default function Login({ onSuccess }) {
       setError("As senhas não coincidem.");
       return;
     }
-    resetPassword(newPassword);
-    setAnswerVerified(false);
-    setAnswer("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setError("");
-    setInfo("Senha redefinida com sucesso! Faça login com a nova senha.");
-    setView("login");
+    setBusy(true);
+    try {
+      await resetPassword(answer, newPassword);
+      setAnswerVerified(false);
+      setAnswer("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setError("");
+      setInfo("Senha redefinida com sucesso! Faça login com a nova senha.");
+      setView("login");
+    } catch (err) {
+      setError(err.message || "Não foi possível redefinir a senha.");
+    } finally {
+      setBusy(false);
+    }
   }
-
-  const securityQuestion = getSecurityQuestion();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#000c47] p-6">
@@ -127,9 +146,10 @@ export default function Login({ onSuccess }) {
 
               <button
                 type="submit"
-                className="w-full rounded-xl bg-canaa-blue py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                disabled={busy}
+                className="w-full rounded-xl bg-canaa-blue py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60"
               >
-                Entrar
+                {busy ? "Entrando..." : "Entrar"}
               </button>
 
               <button
@@ -150,7 +170,9 @@ export default function Login({ onSuccess }) {
               <p className="mt-1 text-xs text-canaa-light">Canaã Lagoa Redonda</p>
             </div>
 
-            {!securityQuestion ? (
+            {loadingQuestion ? (
+              <p className="text-sm text-canaa-light">Carregando...</p>
+            ) : !securityQuestion ? (
               <div className="flex w-full flex-col gap-4 text-center">
                 <p className="text-sm text-canaa-light">
                   Nenhuma pergunta de segurança foi configurada ainda. Entre com a senha atual e
@@ -179,9 +201,10 @@ export default function Login({ onSuccess }) {
 
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-canaa-blue py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                  disabled={busy}
+                  className="w-full rounded-xl bg-canaa-blue py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60"
                 >
-                  Verificar resposta
+                  {busy ? "Verificando..." : "Verificar resposta"}
                 </button>
                 <button
                   type="button"
@@ -214,9 +237,10 @@ export default function Login({ onSuccess }) {
 
                 <button
                   type="submit"
-                  className="w-full rounded-xl bg-canaa-blue py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110"
+                  disabled={busy}
+                  className="w-full rounded-xl bg-canaa-blue py-3 text-sm font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-60"
                 >
-                  Salvar nova senha
+                  {busy ? "Salvando..." : "Salvar nova senha"}
                 </button>
                 <button
                   type="button"

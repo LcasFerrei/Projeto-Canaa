@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import logo from "../assets/canaa-logo.png";
 import Login from "./Login";
@@ -11,22 +11,44 @@ import LockIcon from "../components/ui/LockIcon";
 
 export default function AdminFormBuilder() {
   const [authed, setAuthed] = useState(isAuthenticated());
-  const [schema, setSchema] = useState(() => loadSchema());
+  const [schema, setSchema] = useState(null);
   const [addingToStep, setAddingToStep] = useState(null);
+  const [saveError, setSaveError] = useState("");
+
+  useEffect(() => {
+    if (authed) loadSchema().then(setSchema);
+  }, [authed]);
 
   if (!authed) {
     return <Login onSuccess={() => setAuthed(true)} />;
   }
 
-  function commit(nextSchema) {
-    setSchema(nextSchema);
-    saveSchema(nextSchema);
+  if (!schema) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100">
+        <p className="text-sm text-slate-500">Carregando...</p>
+      </div>
+    );
   }
 
-  function updateStepTitle(stepId, title) {
-    commit({
-      steps: schema.steps.map((s) => (s.id === stepId ? { ...s, title } : s)),
-    });
+  async function commit(nextSchema) {
+    setSchema(nextSchema);
+    setSaveError("");
+    try {
+      await saveSchema(nextSchema);
+    } catch (err) {
+      setSaveError(err.message || "Não foi possível salvar as alterações.");
+    }
+  }
+
+  function updateStepTitleLocal(stepId, title) {
+    setSchema((prev) => ({
+      steps: prev.steps.map((s) => (s.id === stepId ? { ...s, title } : s)),
+    }));
+  }
+
+  function persistSchema() {
+    saveSchema(schema).catch((err) => setSaveError(err.message || "Não foi possível salvar."));
   }
 
   function updateFieldInStep(stepId, fieldId, patch) {
@@ -74,12 +96,17 @@ export default function AdminFormBuilder() {
     setAddingToStep(null);
   }
 
-  function handleReset() {
+  async function handleReset() {
     if (!confirm("Isso vai restaurar o formulário para o padrão original, desfazendo todas as alterações. Continuar?"))
       return;
-    resetSchema();
-    setSchema(loadSchema());
-    setAddingToStep(null);
+    try {
+      const defaultSchema = await resetSchema();
+      setSchema(defaultSchema);
+      setAddingToStep(null);
+      setSaveError("");
+    } catch (err) {
+      setSaveError(err.message || "Não foi possível restaurar o padrão.");
+    }
   }
 
   return (
@@ -112,11 +139,16 @@ export default function AdminFormBuilder() {
           podem ser editados livremente.
         </div>
 
+        {saveError && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{saveError}</p>
+        )}
+
         {schema.steps.map((step) => (
           <div key={step.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <textarea
               value={step.title}
-              onChange={(e) => updateStepTitle(step.id, e.target.value)}
+              onChange={(e) => updateStepTitleLocal(step.id, e.target.value)}
+              onBlur={persistSchema}
               rows={step.title.includes("\n") ? 2 : 1}
               className="mb-4 w-full resize-none rounded-md border border-transparent bg-transparent px-1 py-1 text-sm font-extrabold uppercase tracking-wide text-canaa-blue outline-none hover:border-slate-200 focus:border-canaa-light focus:bg-white"
             />

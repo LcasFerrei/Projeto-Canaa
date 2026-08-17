@@ -1,6 +1,9 @@
-const DRAFT_KEY = "canaa_cadastro_draft";
-const RECORDS_KEY = "canaa_cadastros";
+import { apiFetch } from "./apiClient";
 
+const DRAFT_KEY = "canaa_cadastro_draft";
+
+// Rascunho do formulário em preenchimento: fica só neste navegador mesmo,
+// não faz sentido sincronizar entre dispositivos um cadastro incompleto.
 export function loadDraft() {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
@@ -22,42 +25,24 @@ export function clearDraft() {
   localStorage.removeItem(DRAFT_KEY);
 }
 
-export function loadRecords() {
-  try {
-    const raw = localStorage.getItem(RECORDS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+// Cadastros enviados: ficam no servidor (KV), compartilhados entre todos os
+// navegadores/dispositivos.
+export async function loadRecords() {
+  return apiFetch("/api/records");
 }
 
-export function addRecord(data) {
-  const records = loadRecords();
-  const record = {
-    ...data,
-    id: crypto.randomUUID(),
-    enviadoEm: new Date().toISOString(),
-  };
-  records.push(record);
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-  return record;
+export async function addRecord(data) {
+  return apiFetch("/api/records", { method: "POST", body: JSON.stringify(data) });
 }
 
-export function deleteRecord(id) {
-  const records = loadRecords().filter((r) => r.id !== id);
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+export async function updateRecord(id, patch) {
+  return apiFetch(`/api/records/${id}`, { method: "PUT", body: JSON.stringify(patch) });
 }
 
-export function replaceAllRecords(records) {
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+export async function deleteRecord(id) {
+  await apiFetch(`/api/records/${id}`, { method: "DELETE" });
 }
 
-export function updateRecord(id, patch) {
-  const records = loadRecords();
-  const index = records.findIndex((r) => r.id === id);
-  if (index === -1) return null;
-  const updated = { ...records[index], ...patch, atualizadoEm: new Date().toISOString() };
-  records[index] = updated;
-  localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
-  return updated;
+export async function replaceAllRecords(records) {
+  await apiFetch("/api/records", { method: "PUT", body: JSON.stringify(records) });
 }

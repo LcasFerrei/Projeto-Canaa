@@ -16,19 +16,32 @@ function buildEmptyFormData(schema) {
 }
 
 export function useCadastroForm() {
-  const [schema] = useState(() => loadSchema());
+  const [schema, setSchema] = useState(null);
+  const [loadingSchema, setLoadingSchema] = useState(true);
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState(() => {
-    const draft = loadDraft();
-    return draft ?? buildEmptyFormData(schema);
-  });
+  const [formData, setFormData] = useState(() => loadDraft() ?? {});
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
-
-  const stepCount = schema.steps.length;
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
-    if (!submitted) saveDraft(formData);
+    let cancelled = false;
+    loadSchema().then((s) => {
+      if (cancelled) return;
+      setSchema(s);
+      setLoadingSchema(false);
+      setFormData((prev) => (Object.keys(prev).length ? prev : buildEmptyFormData(s)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stepCount = schema?.steps.length ?? 0;
+
+  useEffect(() => {
+    if (!submitted && Object.keys(formData).length) saveDraft(formData);
   }, [formData, submitted]);
 
   function updateField(name, value) {
@@ -62,7 +75,24 @@ export function useCadastroForm() {
     return Object.keys(nextErrors).length === 0;
   }
 
-  function goNext() {
+  async function submitForm() {
+    if (!validateStep(step)) return false;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      await addRecord(formData);
+      clearDraft();
+      setSubmitted(true);
+      return true;
+    } catch (err) {
+      setSubmitError(err.message || "Não foi possível enviar. Tente novamente.");
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function goNext() {
     if (!validateStep(step)) return false;
     if (step < stepCount) {
       setStep((s) => s + 1);
@@ -79,29 +109,25 @@ export function useCadastroForm() {
     }
   }
 
-  function submitForm() {
-    if (!validateStep(step)) return false;
-    addRecord(formData);
-    clearDraft();
-    setSubmitted(true);
-    return true;
-  }
-
   function resetForm() {
-    setFormData(buildEmptyFormData(schema));
+    setFormData(schema ? buildEmptyFormData(schema) : {});
     setErrors({});
     setStep(1);
     setSubmitted(false);
+    setSubmitError("");
     clearDraft();
   }
 
   return {
     schema,
+    loadingSchema,
     stepCount,
     step,
     formData,
     errors,
     submitted,
+    submitting,
+    submitError,
     updateField,
     updateFilho,
     addFilho,

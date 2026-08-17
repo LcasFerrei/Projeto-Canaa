@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import logo from "../assets/canaa-logo.png";
 import Login from "./Login";
@@ -9,40 +9,76 @@ import {
   setSecurityQuestion,
   changePassword,
 } from "../utils/auth";
+import { loadRecords, replaceAllRecords } from "../utils/storage";
+
+const LEGACY_RECORDS_KEY = "canaa_cadastros";
+
+function getLegacyRecords() {
+  try {
+    const raw = localStorage.getItem(LEGACY_RECORDS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function AdminSettings() {
   const [authed, setAuthed] = useState(isAuthenticated());
 
-  const [question, setQuestion] = useState(getSecurityQuestion() || "");
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [questionMsg, setQuestionMsg] = useState("");
+  const [savingQuestion, setSavingQuestion] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordMsg, setPasswordMsg] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  const [legacyRecords, setLegacyRecords] = useState(() => getLegacyRecords());
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+
+  useEffect(() => {
+    if (!authed) return;
+    getSecurityQuestion().then((q) => {
+      setCurrentQuestion(q);
+      setQuestion(q || "");
+    });
+  }, [authed]);
 
   if (!authed) {
     return <Login onSuccess={() => setAuthed(true)} />;
   }
 
-  function handleSaveQuestion(e) {
+  async function handleSaveQuestion(e) {
     e.preventDefault();
     if (!question.trim()) {
       setQuestionMsg("Preencha a pergunta.");
       return;
     }
-    if (!answer.trim() && !getSecurityQuestion()) {
+    if (!answer.trim() && !currentQuestion) {
       setQuestionMsg("Preencha a resposta.");
       return;
     }
-    setSecurityQuestion(question, answer);
-    setAnswer("");
-    setQuestionMsg("Pergunta de segurança salva com sucesso.");
+    setSavingQuestion(true);
+    try {
+      await setSecurityQuestion(question, answer);
+      setCurrentQuestion(question);
+      setAnswer("");
+      setQuestionMsg("Pergunta de segurança salva com sucesso.");
+    } catch (err) {
+      setQuestionMsg(err.message || "Não foi possível salvar.");
+    } finally {
+      setSavingQuestion(false);
+    }
   }
 
-  function handleChangePassword(e) {
+  async function handleChangePassword(e) {
     e.preventDefault();
     setPasswordMsg("");
     if (newPassword.length < 4) {
@@ -53,7 +89,9 @@ export default function AdminSettings() {
       setPasswordError("As senhas não coincidem.");
       return;
     }
-    const ok = changePassword(currentPassword, newPassword);
+    setSavingPassword(true);
+    const ok = await changePassword(currentPassword, newPassword);
+    setSavingPassword(false);
     if (!ok) {
       setPasswordError("Senha atual incorreta.");
       return;
@@ -63,6 +101,29 @@ export default function AdminSettings() {
     setNewPassword("");
     setConfirmPassword("");
     setPasswordMsg("Senha alterada com sucesso.");
+  }
+
+  async function handleImportLegacy() {
+    if (!legacyRecords.length) return;
+    if (
+      !confirm(
+        `Foram encontrados ${legacyRecords.length} cadastro(s) salvos só neste navegador (de antes dos dados ficarem centralizados). Importar para o servidor agora?`
+      )
+    )
+      return;
+    setImporting(true);
+    setImportMsg("");
+    try {
+      const current = await loadRecords();
+      await replaceAllRecords([...current, ...legacyRecords]);
+      localStorage.removeItem(LEGACY_RECORDS_KEY);
+      setLegacyRecords([]);
+      setImportMsg(`${legacyRecords.length} cadastro(s) importado(s) com sucesso!`);
+    } catch (err) {
+      setImportMsg(err.message || "Não foi possível importar.");
+    } finally {
+      setImporting(false);
+    }
   }
 
   return (
@@ -101,6 +162,26 @@ export default function AdminSettings() {
           <span aria-hidden="true">→</span>
         </Link>
 
+        {legacyRecords.length > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-amber-700">
+              Cadastros antigos encontrados neste navegador
+            </h2>
+            <p className="mt-2 text-sm text-amber-800">
+              Encontramos {legacyRecords.length} cadastro(s) salvos só neste navegador, de antes dos
+              dados passarem a ficar centralizados no servidor. Importe agora para não perdê-los.
+            </p>
+            {importMsg && <p className="mt-2 text-xs font-semibold text-emerald-700">{importMsg}</p>}
+            <button
+              onClick={handleImportLegacy}
+              disabled={importing}
+              className="mt-3 rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
+            >
+              {importing ? "Importando..." : "Importar para o servidor"}
+            </button>
+          </div>
+        )}
+
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-extrabold uppercase tracking-wide text-canaa-blue">Conta</h2>
           <p className="mt-2 text-sm text-slate-600">
@@ -133,7 +214,7 @@ export default function AdminSettings() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="answer" className="text-sm font-bold text-canaa-blue">
-                Resposta {getSecurityQuestion() && "(deixe em branco para manter a atual)"}
+                Resposta {currentQuestion && "(deixe em branco para manter a atual)"}
               </label>
               <input
                 id="answer"
@@ -150,9 +231,10 @@ export default function AdminSettings() {
 
             <button
               type="submit"
-              className="w-fit rounded-lg bg-canaa-blue px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
+              disabled={savingQuestion}
+              className="w-fit rounded-lg bg-canaa-blue px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
             >
-              Salvar pergunta
+              {savingQuestion ? "Salvando..." : "Salvar pergunta"}
             </button>
           </div>
         </form>
@@ -206,9 +288,10 @@ export default function AdminSettings() {
 
             <button
               type="submit"
-              className="w-fit rounded-lg bg-canaa-blue px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110"
+              disabled={savingPassword}
+              className="w-fit rounded-lg bg-canaa-blue px-5 py-2.5 text-sm font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-60"
             >
-              Salvar nova senha
+              {savingPassword ? "Salvando..." : "Salvar nova senha"}
             </button>
           </div>
         </form>
